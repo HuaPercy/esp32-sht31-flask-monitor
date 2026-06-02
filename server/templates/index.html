@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="5">
+    <title>局部环境温湿度监测系统</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <main class="page">
+        <header class="header">
+            <h1>局部环境温湿度监测系统</h1>
+            <p>ESP32 无线采集节点 · Ubuntu Flask 上位机</p>
+        </header>
+
+        <section class="panel">
+            <h2>当前数据</h2>
+
+            {% if latest_data %}
+            <div class="status-card {{ latest_data.status | lower }}">
+                <div>
+                    <span class="label">设备编号</span>
+                    <strong>{{ latest_data.device_id }}</strong>
+                </div>
+                <div>
+                    <span class="label">温度</span>
+                    <strong>{{ latest_data.temperature }} ℃</strong>
+                </div>
+                <div>
+                    <span class="label">湿度</span>
+                    <strong>{{ latest_data.humidity }} %</strong>
+                </div>
+                <div>
+                    <span class="label">状态</span>
+                    <strong>{{ latest_data.status }}</strong>
+                </div>
+                <div>
+                    <span class="label">更新时间</span>
+                    <strong>{{ latest_data.time }}</strong>
+                </div>
+            </div>
+            {% else %}
+            <p class="empty">暂无数据</p>
+            {% endif %}
+        </section>
+
+        <section class="panel">
+            <h2>最近 10 条记录</h2>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>设备编号</th>
+                        <th>温度</th>
+                        <th>湿度</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in recent_data %}
+                    <tr>
+                        <td>{{ row.time }}</td>
+                        <td>{{ row.device_id }}</td>
+                        <td>{{ row.temperature }} ℃</td>
+                        <td>{{ row.humidity }} %</td>
+                        <td>
+                            <span class="badge {{ row.status | lower }}">
+                                {{ row.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+    </main>
+</body>
+</html>
+

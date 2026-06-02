@@ -1,0 +1,7 @@
+{
+  "device_id": "ESP32-ROOM-001",
+  "warning_temperature": 35.0,
+  "warning_humidity": 75.0,
+  "csv_file": "data/sensor_data.csv",
+  "log_file": "logs/system.log"
+}

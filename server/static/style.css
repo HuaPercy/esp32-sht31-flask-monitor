@@ -1,0 +1,103 @@
+body {
+    margin: 0;
+    font-family: Arial, "Microsoft YaHei", sans-serif;
+    background: #f4f6f8;
+    color: #1f2933;
+}
+
+.page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 32px;
+}
+
+.header {
+    margin-bottom: 24px;
+}
+
+.header h1 {
+    margin: 0 0 8px;
+    font-size: 32px;
+}
+
+.header p {
+    margin: 0;
+    color: #637381;
+}
+
+.panel {
+    background: #ffffff;
+    border: 1px solid #d9e2ec;
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 24px;
+}
+
+.panel h2 {
+    margin-top: 0;
+}
+
+.status-card {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 6px solid #2f855a;
+    background: #f0fff4;
+}
+
+.status-card.warning {
+    border-left-color: #c53030;
+    background: #fff5f5;
+}
+
+.label {
+    display: block;
+    margin-bottom: 6px;
+    color: #637381;
+    font-size: 14px;
+}
+
+strong {
+    font-size: 18px;
+}
+
+.empty {
+    color: #637381;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #ffffff;
+}
+
+th,
+td {
+    border: 1px solid #d9e2ec;
+    padding: 10px;
+    text-align: center;
+}
+
+th {
+    background: #edf2f7;
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.badge.normal {
+    color: #22543d;
+    background: #c6f6d5;
+}
+
+.badge.warning {
+    color: #742a2a;
+    background: #fed7d7;
+}
