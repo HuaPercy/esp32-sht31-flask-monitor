@@ -15,6 +15,10 @@
 
         <section class="panel">
             <h2>当前数据</h2>
+            <p class="threshold">
+                报警阈值：温度 ≥ {{ config.warning_temperature }} ℃，
+                湿度 ≥ {{ config.warning_humidity }} %
+            </p>
 
             {% if latest_data %}
             <div class="status-card {{ latest_data.status | lower }}">
@@ -33,6 +37,10 @@
                 <div>
                     <span class="label">状态</span>
                     <strong>{{ latest_data.status }}</strong>
+                </div>
+                <div>
+                    <span class="label">报警原因</span>
+                    <strong>{{ latest_data.alert_reason }}</strong>
                 </div>
                 <div>
                     <span class="label">更新时间</span>
@@ -55,6 +63,7 @@
                         <th>温度</th>
                         <th>湿度</th>
                         <th>状态</th>
+                        <th>报警原因</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -69,6 +78,7 @@
                                 {{ row.status }}
                             </span>
                         </td>
+                        <td>{{ row.alert_reason }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -77,4 +87,3 @@
     </main>
 </body>
 </html>
-

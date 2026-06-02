@@ -1,5 +1,6 @@
 import csv
 import json
+import os
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template
 
@@ -14,10 +15,30 @@ def load_config():
         return json.load(file)
 
 
+def ensure_runtime_dirs(config):
+    csv_dir = os.path.dirname(config["csv_file"])
+    log_dir = os.path.dirname(config["log_file"])
+
+    if csv_dir:
+        os.makedirs(csv_dir, exist_ok=True)
+
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+
+
 def get_status(temperature, humidity, config):
-    if temperature >= config["warning_temperature"] or humidity >= config["warning_humidity"]:
-        return "Warning"
-    return "Normal"
+    reasons = []
+
+    if temperature >= config["warning_temperature"]:
+        reasons.append("温度过高")
+
+    if humidity >= config["warning_humidity"]:
+        reasons.append("湿度过高")
+
+    if reasons:
+        return "Warning", "，".join(reasons)
+
+    return "Normal", "无异常"
 
 
 def write_csv(data, config):
@@ -31,7 +52,14 @@ def write_csv(data, config):
         file_exists = False
 
     with open(csv_file, "a", newline="") as file:
-        fieldnames = ["time", "device_id", "temperature", "humidity", "status"]
+        fieldnames = [
+            "time",
+            "device_id",
+            "temperature",
+            "humidity",
+            "status",
+            "alert_reason",
+        ]
         writer = csv.DictWriter(file, fieldnames=fieldnames)
 
         if not file_exists:
@@ -62,12 +90,14 @@ def read_recent_data(config, limit=10):
 @app.route("/")
 def index():
     config = load_config()
+    ensure_runtime_dirs(config)
     recent_data = read_recent_data(config)
 
     return render_template(
         "index.html",
         latest_data=latest_data,
-        recent_data=recent_data
+        recent_data=recent_data,
+        config=config,
     )
 
 
@@ -76,6 +106,8 @@ def receive_data():
     global latest_data
 
     config = load_config()
+    ensure_runtime_dirs(config)
+
     payload = request.get_json()
 
     if payload is None:
@@ -89,20 +121,27 @@ def receive_data():
         if device_id != config["device_id"]:
             raise ValueError("Invalid device ID")
 
-        status = get_status(temperature, humidity, config)
+        status, alert_reason = get_status(temperature, humidity, config)
 
         latest_data = {
             "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "device_id": device_id,
             "temperature": temperature,
             "humidity": humidity,
-            "status": status
+            "status": status,
+            "alert_reason": alert_reason,
         }
 
         write_csv(latest_data, config)
         write_log(f"Received OK: {latest_data}", config)
 
-        return jsonify({"message": "Data received", "status": status}), 200
+        return jsonify(
+            {
+                "message": "Data received",
+                "status": status,
+                "alert_reason": alert_reason,
+            }
+        ), 200
 
     except (KeyError, ValueError) as error:
         write_log(f"Receive error: {payload} | {error}", config)
@@ -111,3 +150,5 @@ def receive_data():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+
+
