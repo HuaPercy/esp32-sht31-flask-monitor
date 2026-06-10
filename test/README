@@ -1,11 +1,7 @@
+## 我的理解
 
-This directory is intended for PlatformIO Test Runner and project tests.
+WiFi 密码不应该直接写在 main.cpp 中，因为它属于私密信息，上传到 GitHub 后可能泄露。同时 WiFi 名、密码和服务器地址属于容易变化的参数，单独放在 secrets.h 中更方便修改。
 
-Unit Testing is a software testing method by which individual units of
-source code, sets of one or more MCU program modules together with associated
-control data, usage procedures, and operating procedures, are tested to
-determine whether they are fit for use. Unit testing finds problems early
-in the development cycle.
+secrets.h 和 config.json 的相似点是，它们都把可变参数从主程序逻辑中分离出来，让主程序更清晰，也方便后续维护。不同点是，secrets.h 用在 ESP32 端，config.json 用在 Flask 服务端。
 
-More information about PlatformIO Unit Testing:
-- https://docs.platformio.org/en/latest/advanced/unit-testing/index.html
+Ubuntu IP 变化后，ESP32 可能发送失败，是因为 ESP32 代码中的 SERVER_URL 仍然指向旧的 Ubuntu 地址。ESP32 和 Ubuntu 需要处于同一局域网，并且 SERVER_URL 要填写当前 Ubuntu Flask 服务的实际 IP 地址。
