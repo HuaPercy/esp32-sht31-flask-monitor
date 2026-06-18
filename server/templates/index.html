@@ -1,89 +1,680 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="5">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
     <title>局部环境温湿度监测系统</title>
-    <link rel="stylesheet" href="/static/style.css">
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}"
+    >
 </head>
+
 <body>
-    <main class="page">
-        <header class="header">
+<main class="page-container">
+
+    <header class="page-header">
+        <div>
             <h1>局部环境温湿度监测系统</h1>
-            <p>ESP32 无线采集节点 · Ubuntu Flask 上位机</p>
-        </header>
+            <p>多区域无线采集 · Ubuntu Flask 上位机</p>
+        </div>
 
-        <section class="panel">
-            <h2>当前数据</h2>
-            <p class="threshold">
-                报警阈值：温度 ≥ {{ config.warning_temperature }} ℃，
-                湿度 ≥ {{ config.warning_humidity }} %
-            </p>
+        <div class="update-indicator">
+            <span id="connection-dot"></span>
+            <span id="connection-text">正在连接服务器</span>
+        </div>
+    </header>
 
-            {% if latest_data %}
-            <div class="status-card {{ latest_data.status | lower }}">
+    <section class="device-grid">
+        {% for device in devices %}
+        <article
+            class="device-card"
+            id="device-card-{{ device.device_id }}"
+        >
+            <div class="device-card-header">
                 <div>
-                    <span class="label">设备编号</span>
-                    <strong>{{ latest_data.device_id }}</strong>
+                    <p class="device-id">
+                        {{ device.device_id }}
+                    </p>
+
+                    <h2>{{ device.location }}</h2>
                 </div>
-                <div>
-                    <span class="label">温度</span>
-                    <strong>{{ latest_data.temperature }} ℃</strong>
+
+                <span
+                    class="status-badge status-offline"
+                    id="status-{{ device.device_id }}"
+                >
+                    暂无数据
+                </span>
+            </div>
+
+            <div class="device-threshold">
+                <span>
+                    温度报警 ≥
+                    {{ device.warning_temperature }} ℃
+                </span>
+
+                <span>
+                    湿度报警 ≥
+                    {{ device.warning_humidity }} %
+                </span>
+            </div>
+
+            <div
+                class="offline-notice"
+                id="offline-{{ device.device_id }}"
+                hidden
+            >
+                设备已停止上传，当前显示最后一次数据。
+            </div>
+
+            <div
+                class="empty-state"
+                id="empty-{{ device.device_id }}"
+            >
+                正在等待该区域的 ESP32 上传数据
+            </div>
+
+            <div
+                class="metric-grid"
+                id="metrics-{{ device.device_id }}"
+                hidden
+            >
+                <div
+                    class="metric-item"
+                    id="temperature-box-{{ device.device_id }}"
+                >
+                    <span class="metric-label">温度</span>
+
+                    <strong id="temperature-{{ device.device_id }}">
+                        --
+                    </strong>
                 </div>
-                <div>
-                    <span class="label">湿度</span>
-                    <strong>{{ latest_data.humidity }} %</strong>
+
+                <div
+                    class="metric-item"
+                    id="humidity-box-{{ device.device_id }}"
+                >
+                    <span class="metric-label">湿度</span>
+
+                    <strong id="humidity-{{ device.device_id }}">
+                        --
+                    </strong>
                 </div>
-                <div>
-                    <span class="label">状态</span>
-                    <strong>{{ latest_data.status }}</strong>
+
+                <div class="metric-item">
+                    <span class="metric-label">报警原因</span>
+
+                    <strong id="reason-{{ device.device_id }}">
+                        --
+                    </strong>
                 </div>
-                <div>
-                    <span class="label">报警原因</span>
-                    <strong>{{ latest_data.alert_reason }}</strong>
-                </div>
-                <div>
-                    <span class="label">更新时间</span>
-                    <strong>{{ latest_data.time }}</strong>
+
+                <div class="metric-item">
+                    <span class="metric-label">更新时间</span>
+
+                    <strong id="time-{{ device.device_id }}">
+                        --
+                    </strong>
                 </div>
             </div>
-            {% else %}
-            <p class="empty">暂无数据</p>
-            {% endif %}
-        </section>
 
-        <section class="panel">
-            <h2>最近 10 条记录</h2>
+            <div class="chart-section">
+                <div class="chart-legend">
+                    <span class="legend-temperature">温度</span>
+                    <span class="legend-humidity">湿度</span>
+                </div>
 
+                <svg
+                    class="trend-chart"
+                    id="chart-{{ device.device_id }}"
+                    viewBox="0 0 600 230"
+                    role="img"
+                    aria-label="{{ device.location }}温湿度趋势图"
+                ></svg>
+            </div>
+        </article>
+        {% endfor %}
+    </section>
+
+    <section class="history-section">
+        <div class="history-header">
+            <h2>最近 20 条监测记录</h2>
+
+            <span id="server-time">
+                服务器时间：--
+            </span>
+        </div>
+
+        <div class="table-wrapper">
             <table>
                 <thead>
-                    <tr>
-                        <th>时间</th>
-                        <th>设备编号</th>
-                        <th>温度</th>
-                        <th>湿度</th>
-                        <th>状态</th>
-                        <th>报警原因</th>
-                    </tr>
+                <tr>
+                    <th>时间</th>
+                    <th>位置</th>
+                    <th>设备编号</th>
+                    <th>温度</th>
+                    <th>湿度</th>
+                    <th>状态</th>
+                    <th>报警原因</th>
+                </tr>
                 </thead>
-                <tbody>
-                    {% for row in recent_data %}
-                    <tr>
-                        <td>{{ row.time }}</td>
-                        <td>{{ row.device_id }}</td>
-                        <td>{{ row.temperature }} ℃</td>
-                        <td>{{ row.humidity }} %</td>
-                        <td>
-                            <span class="badge {{ row.status | lower }}">
-                                {{ row.status }}
-                            </span>
-                        </td>
-                        <td>{{ row.alert_reason }}</td>
-                    </tr>
-                    {% endfor %}
+
+                <tbody id="history-body">
+                <tr>
+                    <td colspan="7" class="empty-table">
+                        正在读取监测记录
+                    </td>
+                </tr>
                 </tbody>
             </table>
-        </section>
-    </main>
+        </div>
+    </section>
+
+</main>
+
+<script>
+    function createSvgElement(name, attributes = {}) {
+        const element = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            name
+        );
+
+        Object.entries(attributes).forEach(([key, value]) => {
+            element.setAttribute(key, value);
+        });
+
+        return element;
+    }
+
+    function drawChart(
+        svg,
+        records,
+        temperatureThreshold,
+        humidityThreshold
+    ) {
+        svg.innerHTML = "";
+
+        if (!records || records.length === 0) {
+            const message = createSvgElement("text", {
+                x: 300,
+                y: 115,
+                "text-anchor": "middle",
+                fill: "#64748b",
+                "font-size": 14
+            });
+
+            message.textContent = "暂无趋势数据";
+            svg.appendChild(message);
+            return;
+        }
+
+        const width = 600;
+        const height = 230;
+
+        const padding = {
+            top: 25,
+            right: 20,
+            bottom: 45,
+            left: 45
+        };
+
+        const chartWidth =
+            width - padding.left - padding.right;
+
+        const chartHeight =
+            height - padding.top - padding.bottom;
+
+        const temperatures = records.map(
+            record => Number(record.temperature)
+        );
+
+        const humidities = records.map(
+            record => Number(record.humidity)
+        );
+
+        const allValues = [
+            ...temperatures,
+            ...humidities,
+            temperatureThreshold,
+            humidityThreshold
+        ].filter(Number.isFinite);
+
+        let minimum = Math.floor(
+            Math.min(...allValues) - 5
+        );
+
+        let maximum = Math.ceil(
+            Math.max(...allValues) + 5
+        );
+
+        if (minimum === maximum) {
+            minimum -= 5;
+            maximum += 5;
+        }
+
+        function getX(index) {
+            if (records.length === 1) {
+                return padding.left + chartWidth / 2;
+            }
+
+            return padding.left +
+                index * chartWidth /
+                (records.length - 1);
+        }
+
+        function getY(value) {
+            return padding.top +
+                (maximum - value) /
+                (maximum - minimum) *
+                chartHeight;
+        }
+
+        // 绘制背景网格和纵轴数字
+        for (let index = 0; index <= 4; index++) {
+            const y =
+                padding.top +
+                index * chartHeight / 4;
+
+            const value =
+                maximum -
+                index * (maximum - minimum) / 4;
+
+            svg.appendChild(
+                createSvgElement("line", {
+                    x1: padding.left,
+                    y1: y,
+                    x2: width - padding.right,
+                    y2: y,
+                    stroke: "#d7e0ea",
+                    "stroke-width": 1
+                })
+            );
+
+            const label = createSvgElement("text", {
+                x: padding.left - 10,
+                y: y + 4,
+                "text-anchor": "end",
+                fill: "#64748b",
+                "font-size": 11
+            });
+
+            label.textContent = value.toFixed(0);
+            svg.appendChild(label);
+        }
+
+        // 绘制报警阈值虚线
+        function drawThreshold(value, color, labelText) {
+            if (!Number.isFinite(value)) {
+                return;
+            }
+
+            const y = getY(value);
+
+            svg.appendChild(
+                createSvgElement("line", {
+                    x1: padding.left,
+                    y1: y,
+                    x2: width - padding.right,
+                    y2: y,
+                    stroke: color,
+                    "stroke-width": 1.5,
+                    "stroke-dasharray": "7 5",
+                    opacity: 0.7
+                })
+            );
+
+            const label = createSvgElement("text", {
+                x: width - padding.right,
+                y: y - 6,
+                "text-anchor": "end",
+                fill: color,
+                "font-size": 10,
+                "font-weight": 700
+            });
+
+            label.textContent = labelText;
+            svg.appendChild(label);
+        }
+
+        drawThreshold(
+            temperatureThreshold,
+            "#dc2626",
+            `温度阈值 ${temperatureThreshold}℃`
+        );
+
+        drawThreshold(
+            humidityThreshold,
+            "#0369a1",
+            `湿度阈值 ${humidityThreshold}%`
+        );
+
+        // 绘制数据折线和数据点
+        function drawLine(values, color, threshold, dataName) {
+            const points = values.map(
+                (value, index) =>
+                    `${getX(index)},${getY(value)}`
+            ).join(" ");
+
+            svg.appendChild(
+                createSvgElement("polyline", {
+                    points,
+                    fill: "none",
+                    stroke: color,
+                    "stroke-width": 3,
+                    "stroke-linecap": "round",
+                    "stroke-linejoin": "round"
+                })
+            );
+
+            values.forEach((value, index) => {
+                const isWarning =
+                    Number.isFinite(threshold) &&
+                    value >= threshold;
+
+                if (isWarning) {
+                    svg.appendChild(
+                        createSvgElement("circle", {
+                            cx: getX(index),
+                            cy: getY(value),
+                            r: 10,
+                            fill: color,
+                            opacity: 0.15
+                        })
+                    );
+                }
+
+                const point = createSvgElement("circle", {
+                    cx: getX(index),
+                    cy: getY(value),
+                    r: isWarning ? 7 : 3,
+                    fill: color,
+                    stroke: isWarning ? "#ffffff" : color,
+                    "stroke-width": isWarning ? 3 : 0
+                });
+
+                const title = createSvgElement("title");
+
+                title.textContent = isWarning
+                    ? `${dataName}报警：${value}，阈值：${threshold}`
+                    : `${dataName}：${value}`;
+
+                point.appendChild(title);
+                svg.appendChild(point);
+            });
+        }
+
+        drawLine(
+            temperatures,
+            "#ef4444",
+            temperatureThreshold,
+            "温度"
+        );
+
+        drawLine(
+            humidities,
+            "#0284c7",
+            humidityThreshold,
+            "湿度"
+        );
+
+        const firstTime = createSvgElement("text", {
+            x: padding.left,
+            y: height - 12,
+            fill: "#64748b",
+            "font-size": 10
+        });
+
+        firstTime.textContent = records[0].time;
+
+        const lastTime = createSvgElement("text", {
+            x: width - padding.right,
+            y: height - 12,
+            "text-anchor": "end",
+            fill: "#64748b",
+            "font-size": 10
+        });
+
+        lastTime.textContent =
+            records[records.length - 1].time;
+
+        svg.appendChild(firstTime);
+        svg.appendChild(lastTime);
+    }
+
+    function updateDevice(device) {
+        const deviceId = device.device_id;
+
+        const cardElement = document.getElementById(
+            `device-card-${deviceId}`
+        );
+
+        const statusElement = document.getElementById(
+            `status-${deviceId}`
+        );
+
+        const emptyElement = document.getElementById(
+            `empty-${deviceId}`
+        );
+
+        const metricsElement = document.getElementById(
+            `metrics-${deviceId}`
+        );
+
+        const offlineElement = document.getElementById(
+            `offline-${deviceId}`
+        );
+
+        const temperatureBox = document.getElementById(
+            `temperature-box-${deviceId}`
+        );
+
+        const humidityBox = document.getElementById(
+            `humidity-box-${deviceId}`
+        );
+
+        const temperatureThreshold = Number(
+            device.warning_temperature
+        );
+
+        const humidityThreshold = Number(
+            device.warning_humidity
+        );
+
+        cardElement.classList.remove("device-card-warning");
+        temperatureBox.classList.remove("metric-warning");
+        humidityBox.classList.remove("metric-warning");
+
+        if (!device.latest) {
+            statusElement.textContent = "暂无数据";
+            statusElement.className =
+                "status-badge status-offline";
+
+            emptyElement.hidden = false;
+            metricsElement.hidden = true;
+            offlineElement.hidden = true;
+
+            drawChart(
+                document.getElementById(`chart-${deviceId}`),
+                [],
+                temperatureThreshold,
+                humidityThreshold
+            );
+
+            return;
+        }
+
+        emptyElement.hidden = true;
+        metricsElement.hidden = false;
+
+        const temperature = Number(
+            device.latest.temperature
+        );
+
+        const humidity = Number(
+            device.latest.humidity
+        );
+
+        document.getElementById(
+            `temperature-${deviceId}`
+        ).textContent = `${temperature.toFixed(1)} ℃`;
+
+        document.getElementById(
+            `humidity-${deviceId}`
+        ).textContent = `${humidity.toFixed(1)} %`;
+
+        document.getElementById(
+            `reason-${deviceId}`
+        ).textContent = device.latest.warning_reason;
+
+        document.getElementById(
+            `time-${deviceId}`
+        ).textContent = device.latest.time;
+
+        if (temperature >= temperatureThreshold) {
+            temperatureBox.classList.add("metric-warning");
+        }
+
+        if (humidity >= humidityThreshold) {
+            humidityBox.classList.add("metric-warning");
+        }
+
+        if (device.is_offline) {
+            statusElement.textContent = "Offline";
+            statusElement.className =
+                "status-badge status-offline";
+
+            offlineElement.hidden = false;
+            offlineElement.textContent =
+                `设备已离线，最后一次数据上传于 ` +
+                `${device.offline_seconds} 秒前。`;
+
+        } else if (device.latest.status === "Warning") {
+            statusElement.textContent = "Warning";
+            statusElement.className =
+                "status-badge status-warning";
+
+            offlineElement.hidden = true;
+            cardElement.classList.add("device-card-warning");
+
+        } else {
+            statusElement.textContent = "Normal";
+            statusElement.className =
+                "status-badge status-normal";
+
+            offlineElement.hidden = true;
+        }
+
+        drawChart(
+            document.getElementById(`chart-${deviceId}`),
+            device.chart_records,
+            temperatureThreshold,
+            humidityThreshold
+        );
+    }
+
+    function updateHistory(records) {
+        const tableBody = document.getElementById(
+            "history-body"
+        );
+
+        if (!records || records.length === 0) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="empty-table">
+                        暂无监测记录
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tableBody.innerHTML = records.map(record => {
+            const isWarning =
+                record.status === "Warning";
+
+            const statusClass = isWarning
+                ? "status-warning"
+                : "status-normal";
+
+            const rowClass = isWarning
+                ? "warning-row"
+                : "";
+
+            return `
+                <tr class="${rowClass}">
+                    <td>${record.time}</td>
+                    <td>${record.location}</td>
+                    <td>${record.device_id}</td>
+                    <td>${Number(record.temperature).toFixed(1)} ℃</td>
+                    <td>${Number(record.humidity).toFixed(1)} %</td>
+                    <td>
+                        <span class="status-badge ${statusClass}">
+                            ${record.status}
+                        </span>
+                    </td>
+                    <td>${record.warning_reason}</td>
+                </tr>
+            `;
+        }).join("");
+    }
+
+    async function refreshDashboard() {
+        const connectionDot = document.getElementById(
+            "connection-dot"
+        );
+
+        const connectionText = document.getElementById(
+            "connection-text"
+        );
+
+        try {
+            const response = await fetch(
+                "/api/dashboard",
+                {
+                    cache: "no-store"
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const dashboard = await response.json();
+
+            dashboard.devices.forEach(updateDevice);
+            updateHistory(dashboard.recent_records);
+
+            document.getElementById(
+                "server-time"
+            ).textContent =
+                `服务器时间：${dashboard.server_time}`;
+
+            connectionDot.className = "connected";
+            connectionText.textContent = "数据连接正常";
+
+        } catch (error) {
+            connectionDot.className = "disconnected";
+            connectionText.textContent = "服务器连接失败";
+
+            console.error(
+                "Dashboard update failed:",
+                error
+            );
+        }
+    }
+
+    refreshDashboard();
+
+    // 每秒请求新数据，只更新页面内容，不刷新整个网页。
+    window.setInterval(refreshDashboard, 1000);
+</script>
+
 </body>
 </html>

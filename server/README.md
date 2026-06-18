@@ -24,3 +24,32 @@ Ubuntu Flask 上位机
 CSV 数据文件 + log 日志文件
 ↓
 Web 页面展示
+
+# Day 07 - ESP32 配置分离与 Git 管理
+
+## 学习目标
+
+将 WiFi 密码、WiFi 名称和 Flask 服务器地址从主程序中分离，并使用 Git 管理 ESP32 PlatformIO 项目。
+
+## 项目结构
+
+```text
+esp32-indoor-monitor/
+├── src/
+│   ├── main.cpp
+│   └── secrets.h
+├── platformio.ini
+├── .gitignore
+└── README.md
+
+## Flask 服务排查
+
+当网页或 ESP32 无法访问 Flask 时，按以下顺序检查：
+
+1. 使用 `pgrep -af "python3 app.py"` 检查 Flask 进程。
+2. 使用 `ss -lntp | grep 5000` 检查端口监听。
+3. 使用 `curl http://127.0.0.1:5000` 检查 Ubuntu 本机访问。
+4. 使用 `hostname -I` 检查 Ubuntu 当前 IP。
+5. 检查 Flask 是否监听 `0.0.0.0`。
+6. 检查 ESP32 和 Ubuntu 是否处于同一局域网。
+7. 检查 ESP32 的 SERVER_URL 是否正确。

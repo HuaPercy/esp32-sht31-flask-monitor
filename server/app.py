@@ -1,154 +1,295 @@
+from flask import Flask, jsonify, render_template, request
+from datetime import datetime
 import csv
 import json
 import os
-from datetime import datetime
-from flask import Flask, request, jsonify, render_template
 
 app = Flask(__name__)
 
-CONFIG_FILE = "config.json"
-latest_data = None
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
+OFFLINE_TIMEOUT = 15
 
 
 def load_config():
-    with open(CONFIG_FILE, "r") as file:
+    with open(CONFIG_PATH, "r", encoding="utf-8") as file:
         return json.load(file)
 
 
-def ensure_runtime_dirs(config):
-    csv_dir = os.path.dirname(config["csv_file"])
-    log_dir = os.path.dirname(config["log_file"])
-
-    if csv_dir:
-        os.makedirs(csv_dir, exist_ok=True)
-
-    if log_dir:
-        os.makedirs(log_dir, exist_ok=True)
+def get_file_path(relative_path):
+    return os.path.join(BASE_DIR, relative_path)
 
 
-def get_status(temperature, humidity, config):
-    reasons = []
+def ensure_csv_exists(csv_path):
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
 
-    if temperature >= config["warning_temperature"]:
-        reasons.append("温度过高")
+    if not os.path.exists(csv_path):
+        with open(csv_path, "w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(
+                file,
+                fieldnames=[
+                    "time",
+                    "device_id",
+                    "location",
+                    "temperature",
+                    "humidity",
+                    "status",
+                    "warning_reason",
+                ],
+            )
+            writer.writeheader()
 
-    if humidity >= config["warning_humidity"]:
-        reasons.append("湿度过高")
 
-    if reasons:
-        return "Warning", "，".join(reasons)
+def get_status(temperature, humidity, device_config):
+    temperature_warning = (
+        temperature >= device_config["warning_temperature"]
+    )
+    humidity_warning = (
+        humidity >= device_config["warning_humidity"]
+    )
+
+    if temperature_warning and humidity_warning:
+        return "Warning", "温度过高、湿度过高"
+
+    if temperature_warning:
+        return "Warning", "温度过高"
+
+    if humidity_warning:
+        return "Warning", "湿度过高"
 
     return "Normal", "无异常"
 
 
-def write_csv(data, config):
-    csv_file = config["csv_file"]
-    file_exists = False
-
-    try:
-        with open(csv_file, "r", newline="") as file:
-            file_exists = True
-    except FileNotFoundError:
-        file_exists = False
-
-    with open(csv_file, "a", newline="") as file:
-        fieldnames = [
-            "time",
-            "device_id",
-            "temperature",
-            "humidity",
-            "status",
-            "alert_reason",
-        ]
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-
-        if not file_exists:
-            writer.writeheader()
-
-        writer.writerow(data)
-
-
-def write_log(message, config):
-    log_file = config["log_file"]
-    log_line = f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} {message}\n'
-
-    with open(log_file, "a") as file:
-        file.write(log_line)
-
-
-def read_recent_data(config, limit=10):
-    csv_file = config["csv_file"]
-
-    try:
-        with open(csv_file, "r", newline="") as file:
-            rows = list(csv.DictReader(file))
-            return rows[-limit:]
-    except FileNotFoundError:
+def read_records(csv_path):
+    if not os.path.exists(csv_path):
         return []
+
+    records = []
+
+    with open(csv_path, "r", newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
+
+        for row in reader:
+            try:
+                records.append(
+                    {
+                        "time": row["time"],
+                        "device_id": row["device_id"],
+                        "location": row.get("location", "未知位置"),
+                        "temperature": float(row["temperature"]),
+                        "humidity": float(row["humidity"]),
+                        "status": row["status"],
+                        "warning_reason": row.get(
+                            "warning_reason", "无异常"
+                        ),
+                    }
+                )
+            except (ValueError, KeyError):
+                continue
+
+    return records
+
+
+def write_log(log_path, message):
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+    with open(log_path, "a", encoding="utf-8") as file:
+        file.write(
+            f"{datetime.now():%Y-%m-%d %H:%M:%S} {message}\n"
+        )
+
+
+def build_device_views(config, records):
+    device_views = []
+
+    for device_id, device_config in config["devices"].items():
+        device_records = [
+            record
+            for record in records
+            if record["device_id"] == device_id
+        ]
+
+        latest = device_records[-1] if device_records else None
+        is_offline = True
+        offline_seconds = None
+
+        if latest:
+            try:
+                latest_time = datetime.strptime(
+                    latest["time"],
+                    "%Y-%m-%d %H:%M:%S",
+                )
+
+                offline_seconds = int(
+                    (datetime.now() - latest_time).total_seconds()
+                )
+
+                is_offline = offline_seconds > OFFLINE_TIMEOUT
+
+            except ValueError:
+                is_offline = True
+
+        device_views.append(
+            {
+                "device_id": device_id,
+                "location": device_config["location"],
+                "warning_temperature": device_config[
+                    "warning_temperature"
+                ],
+                "warning_humidity": device_config[
+                    "warning_humidity"
+                ],
+                "latest": latest,
+                "chart_records": device_records[-20:],
+                "is_offline": is_offline,
+                "offline_seconds": offline_seconds,
+            }
+        )
+
+    return device_views
 
 
 @app.route("/")
 def index():
     config = load_config()
-    ensure_runtime_dirs(config)
-    recent_data = read_recent_data(config)
+    csv_path = get_file_path(config["csv_file"])
+
+    ensure_csv_exists(csv_path)
+
+    records = read_records(csv_path)
 
     return render_template(
         "index.html",
-        latest_data=latest_data,
-        recent_data=recent_data,
-        config=config,
+        devices=build_device_views(config, records),
+        recent_records=list(reversed(records[-20:])),
+    )
+
+
+@app.route("/api/dashboard", methods=["GET"])
+def dashboard_data():
+    config = load_config()
+    csv_path = get_file_path(config["csv_file"])
+
+    ensure_csv_exists(csv_path)
+    records = read_records(csv_path)
+
+    return jsonify(
+        {
+            "devices": build_device_views(config, records),
+            "recent_records": list(reversed(records[-20:])),
+            "server_time": datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+        }
     )
 
 
 @app.route("/api/data", methods=["POST"])
 def receive_data():
-    global latest_data
-
     config = load_config()
-    ensure_runtime_dirs(config)
+    data = request.get_json(silent=True)
 
-    payload = request.get_json()
+    if not data:
+        return jsonify({"message": "没有有效的JSON数据"}), 400
 
-    if payload is None:
-        return jsonify({"error": "Invalid JSON"}), 400
+    required_fields = ["device_id", "temperature", "humidity"]
+    missing_fields = [
+        field for field in required_fields if field not in data
+    ]
 
-    try:
-        device_id = payload["device_id"]
-        temperature = float(payload["temperature"])
-        humidity = float(payload["humidity"])
-
-        if device_id != config["device_id"]:
-            raise ValueError("Invalid device ID")
-
-        status, alert_reason = get_status(temperature, humidity, config)
-
-        latest_data = {
-            "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "device_id": device_id,
-            "temperature": temperature,
-            "humidity": humidity,
-            "status": status,
-            "alert_reason": alert_reason,
-        }
-
-        write_csv(latest_data, config)
-        write_log(f"Received OK: {latest_data}", config)
-
+    if missing_fields:
         return jsonify(
             {
-                "message": "Data received",
-                "status": status,
-                "alert_reason": alert_reason,
+                "message": "缺少必要字段",
+                "missing_fields": missing_fields,
             }
-        ), 200
+        ), 400
 
-    except (KeyError, ValueError) as error:
-        write_log(f"Receive error: {payload} | {error}", config)
-        return jsonify({"error": str(error)}), 400
+    device_id = str(data["device_id"])
+
+    if device_id not in config["devices"]:
+        return jsonify(
+            {
+                "message": "未知设备编号",
+                "device_id": device_id,
+            }
+        ), 400
+
+    try:
+        temperature = float(data["temperature"])
+        humidity = float(data["humidity"])
+    except (TypeError, ValueError):
+        return jsonify({"message": "温湿度格式错误"}), 400
+
+    if not -40 <= temperature <= 125:
+        return jsonify({"message": "温度超出测量范围"}), 400
+
+    if not 0 <= humidity <= 100:
+        return jsonify({"message": "湿度超出测量范围"}), 400
+
+    device_config = config["devices"][device_id]
+    location = device_config["location"]
+
+    status, warning_reason = get_status(
+        temperature,
+        humidity,
+        device_config,
+    )
+
+    record = {
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "device_id": device_id,
+        "location": location,
+        "temperature": round(temperature, 2),
+        "humidity": round(humidity, 2),
+        "status": status,
+        "warning_reason": warning_reason,
+    }
+
+    csv_path = get_file_path(config["csv_file"])
+    log_path = get_file_path(config["log_file"])
+
+    ensure_csv_exists(csv_path)
+
+    with open(csv_path, "a", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(
+            file,
+            fieldnames=[
+                "time",
+                "device_id",
+                "location",
+                "temperature",
+                "humidity",
+                "status",
+                "warning_reason",
+            ],
+        )
+        writer.writerow(record)
+
+    write_log(
+        log_path,
+        (
+            f"device={device_id} location={location} "
+            f"temperature={temperature:.2f} "
+            f"humidity={humidity:.2f} "
+            f"status={status} reason={warning_reason}"
+        ),
+    )
+
+    return jsonify(
+        {
+            "message": "Data received",
+            "device_id": device_id,
+            "location": location,
+            "status": status,
+            "warning_reason": warning_reason,
+        }
+    ), 200
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
-
-
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=True,
+    )
