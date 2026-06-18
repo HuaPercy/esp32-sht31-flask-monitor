@@ -1,0 +1,16 @@
+{
+  "devices": {
+    "ESP32-ROOM-001": {
+      "location": "信工学院楼B024",
+      "warning_temperature": 30.0,
+      "warning_humidity": 65.0
+    },
+    "ESP32-ROOM-002": {
+      "location": "信工学院楼B205",
+      "warning_temperature": 30.0,
+      "warning_humidity": 70.0
+    }
+  },
+  "csv_file": "data/sensor_data.csv",
+  "log_file": "logs/system.log"
+}
