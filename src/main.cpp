@@ -1,27 +1,110 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
 #include <DHT.h>
+#include "secrets.h"
 
 #define DHT_PIN 4
 #define DHT_TYPE DHT11
 
 DHT dht(DHT_PIN, DHT_TYPE);
 
+const unsigned long SEND_INTERVAL = 5000;
+unsigned long lastSendTime = 0;
+
+void connectWiFi() {
+    Serial.print("Connecting to WiFi");
+
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+
+    Serial.println();
+    Serial.println("WiFi connected");
+
+    Serial.print("ESP32 IP: ");
+    Serial.println(WiFi.localIP());
+}
+
+bool readDHT11(float &temperature, float &humidity) {
+    humidity = dht.readHumidity();
+    temperature = dht.readTemperature();
+
+    if (isnan(temperature) || isnan(humidity)) {
+        Serial.println("Failed to read DHT11");
+        return false;
+    }
+
+    return true;
+}
+
+void sendSensorData(float temperature, float humidity) {
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("WiFi disconnected, reconnecting...");
+        connectWiFi();
+    }
+
+    HTTPClient http;
+
+    http.begin(SERVER_URL);
+    http.addHeader("Content-Type", "application/json");
+
+    String payload =
+        "{\"device_id\":\"" + String(DEVICE_ID) + "\","
+        "\"temperature\":" + String(temperature, 1) + ","
+        "\"humidity\":" + String(humidity, 1) + "}";
+
+    Serial.print("Payload: ");
+    Serial.println(payload);
+
+    int httpCode = http.POST(payload);
+
+    Serial.print("HTTP status: ");
+    Serial.println(httpCode);
+
+    if (httpCode > 0) {
+        String response = http.getString();
+
+        Serial.print("Server response: ");
+        Serial.println(response);
+    } else {
+        Serial.print("HTTP failed: ");
+        Serial.println(http.errorToString(httpCode));
+    }
+
+    http.end();
+}
+
 void setup() {
     Serial.begin(115200);
     delay(1000);
 
-    Serial.println("DHT11 test started");
+    Serial.println();
+    Serial.println("ESP32 DHT11 monitor started");
+
     dht.begin();
+    connectWiFi();
+
+    /* 让DHT11完成第一次测量 */
+    delay(2000);
 }
 
 void loop() {
-    delay(2000);
+    unsigned long currentTime = millis();
 
-    float humidity = dht.readHumidity();
-    float temperature = dht.readTemperature();
+    if (currentTime - lastSendTime < SEND_INTERVAL) {
+        return;
+    }
 
-    if (isnan(temperature) || isnan(humidity)) {
-        Serial.println("Failed to read DHT11");
+    lastSendTime = currentTime;
+
+    float temperature;
+    float humidity;
+
+    if (!readDHT11(temperature, humidity)) {
         return;
     }
 
@@ -30,4 +113,6 @@ void loop() {
     Serial.print(" C | Humidity: ");
     Serial.print(humidity, 1);
     Serial.println(" %");
+
+    sendSensorData(temperature, humidity);
 }
